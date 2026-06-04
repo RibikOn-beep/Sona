@@ -49,8 +49,11 @@ jobs:
       - name: Expo Prebuild
         run: npx expo prebuild --platform android --clean
 
-      - name: Show build.gradle
-        run: cat android/app/build.gradle
+      - name: Fix release signing
+        run: |
+          sed -i 's/signingConfig signingConfigs.release/\/\/ signingConfig signingConfigs.release/' android/app/build.gradle
+          echo "=== build.gradle lines 25-45 ==="
+          sed -n '25,45p' android/app/build.gradle
 
       - name: Build Android APK
         run: |
