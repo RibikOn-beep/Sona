@@ -49,8 +49,10 @@ jobs:
       - name: Expo Prebuild
         run: npx expo prebuild --platform android --clean
 
-      - name: Fix release signing
+      - name: Fix build.gradle
         run: |
+          PROJECT_ROOT=$(pwd)
+          sed -i "s|entryFile = file(\[\"node\".*resolveAppEntry.*\]\.execute.*)|entryFile = file(\"index.js\")|" android/app/build.gradle
           sed -i 's/signingConfig signingConfigs.release/\/\/ signingConfig signingConfigs.release/' android/app/build.gradle
           echo "=== build.gradle lines 25-45 ==="
           sed -n '25,45p' android/app/build.gradle
