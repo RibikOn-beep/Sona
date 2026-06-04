@@ -29,18 +29,7 @@
       ]
     },
     "plugins": [
-      [
-        "react-native-track-player",
-        {
-          "disableSystemControls": false
-        }
-      ],
-      [
-        "expo-notifications",
-        {
-          "sounds": []
-        }
-      ]
+      "expo-notifications"
     ],
     "extra": {
       "eas": {
