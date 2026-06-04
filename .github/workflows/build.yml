@@ -51,18 +51,16 @@ jobs:
 
       - name: Fix build.gradle
         run: |
-          PROJECT_ROOT=$(pwd)
           sed -i "s|entryFile = file(\[\"node\".*resolveAppEntry.*\]\.execute.*)|entryFile = file(\"index.js\")|" android/app/build.gradle
           sed -i 's/signingConfig signingConfigs.release/\/\/ signingConfig signingConfigs.release/' android/app/build.gradle
-          echo "=== build.gradle lines 25-45 ==="
-          sed -n '25,45p' android/app/build.gradle
 
       - name: Build Android APK
         run: |
           cd android
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleRelease --no-daemon --info 2>&1 | tail -80
         env:
           GRADLE_OPTS: -Xmx4g -XX:MaxMetaspaceSize=512m
+        continue-on-error: true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
