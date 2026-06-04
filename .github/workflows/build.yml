@@ -36,25 +36,21 @@ jobs:
 
       - name: Increment versionCode
         run: |
-          APP_JSON="app.json"
-          CURRENT=$(node -e "console.log(require('./$APP_JSON').expo.android.versionCode)")
+          CURRENT=$(node -e "console.log(require('./app.json').expo.android.versionCode)")
           NEW=$((CURRENT + 1))
           node -e "
             const fs = require('fs');
-            const app = require('./$APP_JSON');
+            const app = require('./app.json');
             app.expo.android.versionCode = $NEW;
-            fs.writeFileSync('$APP_JSON', JSON.stringify(app, null, 2));
+            fs.writeFileSync('./app.json', JSON.stringify(app, null, 2));
           "
           echo "versionCode: $CURRENT → $NEW"
 
       - name: Expo Prebuild
         run: npx expo prebuild --platform android --clean
 
-      - name: Configure TrackPlayer
-        run: |
-          cat >> android/app/src/main/AndroidManifest.xml << 'MANIFEST'
-          MANIFEST
-          echo "TrackPlayer service already configured via prebuild"
+      - name: Show build.gradle
+        run: cat android/app/build.gradle
 
       - name: Build Android APK
         run: |
