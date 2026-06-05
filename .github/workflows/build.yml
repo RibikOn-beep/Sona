@@ -51,18 +51,12 @@ jobs:
 
       - name: Fix build.gradle
         run: |
-          sed -i "s|entryFile = file(\[\"node\".*resolveAppEntry.*\]\.execute.*)|entryFile = file(\"index.js\")|" android/app/build.gradle
+          PROJECT_ROOT=$(pwd)
+          # Fix entryFile path - trebuie sa fie relativ la radacina proiectului
+          sed -i "s|entryFile = file(\"index.js\")|entryFile = file(\"$PROJECT_ROOT/index.js\")|" android/app/build.gradle
           sed -i 's/signingConfig signingConfigs.release/\/\/ signingConfig signingConfigs.release/' android/app/build.gradle
-
-      - name: Bundle JavaScript
-        run: |
-          mkdir -p android/app/src/main/assets
-          npx react-native bundle \
-            --platform android \
-            --dev false \
-            --entry-file index.js \
-            --bundle-output android/app/src/main/assets/index.android.bundle \
-            --assets-dest android/app/src/main/res
+          echo "=== entryFile line ==="
+          grep "entryFile" android/app/build.gradle
 
       - name: Build Android APK
         run: |
