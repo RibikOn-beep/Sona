@@ -54,19 +54,26 @@ jobs:
           sed -i "s|entryFile = file(\[\"node\".*resolveAppEntry.*\]\.execute.*)|entryFile = file(\"index.js\")|" android/app/build.gradle
           sed -i 's/signingConfig signingConfigs.release/\/\/ signingConfig signingConfigs.release/' android/app/build.gradle
 
+      - name: Bundle JavaScript
+        run: |
+          mkdir -p android/app/src/main/assets
+          npx react-native bundle \
+            --platform android \
+            --dev false \
+            --entry-file index.js \
+            --bundle-output android/app/src/main/assets/index.android.bundle \
+            --assets-dest android/app/src/main/res
+
       - name: Build Android APK
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleRelease --no-daemon
         env:
           GRADLE_OPTS: -Xmx4g -XX:MaxMetaspaceSize=512m
-
-      - name: Find APK
-        run: find android -name "*.apk" 2>/dev/null
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: sona-${{ github.ref_name }}-vc${{ github.run_number }}
-          path: android/app/build/outputs/apk/debug/*.apk
+          path: android/app/build/outputs/apk/release/*.apk
           retention-days: 30
