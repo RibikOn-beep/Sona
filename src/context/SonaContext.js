@@ -1,31 +1,73 @@
-import { createContext, useContext, useState, useRef } from 'react';
+import { createContext, useContext, useState, useCallback } from 'react';
+import AudioService from '../services/AudioService';
 
 const SonaContext = createContext(null);
 
 export function SonaProvider({ children }) {
   const [activeSounds, setActiveSounds] = useState([]);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [activeStory, setActiveStory] = useState(null);
-  const [timerMinutes, setTimerMinutes] = useState(null);
-  const [alarmTime, setAlarmTime] = useState(null);
   const [savedAtmospheres, setSavedAtmospheres] = useState([]);
+  const [alarmTime, setAlarmTime] = useState(null);
 
-  const addSound = (sound) => {
+  const loadStare = useCallback(async (sounds) => {
+    await AudioService.stopAll();
+    setActiveSounds([]);
+    setIsPlaying(false);
+    setActiveStory(null);
+
+    const newSounds = sounds.map(s => ({ ...s, volume: 0.7 }));
+    setActiveSounds(newSounds);
+
+    for (const s of newSounds) {
+      await AudioService.playSound(s.id, s.file, s.volume);
+    }
+    setIsPlaying(true);
+  }, []);
+
+  const addSound = useCallback(async (sound) => {
     if (activeSounds.length >= 4) return;
     if (activeSounds.find(s => s.id === sound.id)) return;
-    setActiveSounds(prev => [...prev, { ...sound, volume: 0.7 }]);
-  };
+    const newSound = { ...sound, volume: 0.7 };
+    setActiveSounds(prev => [...prev, newSound]);
+    if (isPlaying) {
+      await AudioService.playSound(newSound.id, newSound.file, newSound.volume);
+    }
+  }, [activeSounds, isPlaying]);
 
-  const removeSound = (soundId) => {
+  const removeSound = useCallback(async (soundId) => {
+    await AudioService.stopSound(soundId);
     setActiveSounds(prev => prev.filter(s => s.id !== soundId));
-  };
+  }, []);
 
-  const updateVolume = (soundId, volume) => {
+  const updateVolume = useCallback(async (soundId, volume) => {
     setActiveSounds(prev =>
       prev.map(s => s.id === soundId ? { ...s, volume } : s)
     );
-  };
+    await AudioService.setVolume(soundId, volume);
+  }, []);
 
-  const saveAtmosphere = (name) => {
+  const play = useCallback(async () => {
+    await AudioService.init();
+    if (activeSounds.length === 0) return;
+    for (const s of activeSounds) {
+      await AudioService.playSound(s.id, s.file, s.volume);
+    }
+    setIsPlaying(true);
+  }, [activeSounds]);
+
+  const pause = useCallback(async () => {
+    await AudioService.pauseAll();
+    setIsPlaying(false);
+  }, []);
+
+  const stopAll = useCallback(async () => {
+    await AudioService.stopAll();
+    setActiveSounds([]);
+    setIsPlaying(false);
+  }, []);
+
+  const saveAtmosphere = useCallback((name) => {
     if (activeSounds.length === 0) return;
     const atmosphere = {
       id: Date.now().toString(),
@@ -34,26 +76,29 @@ export function SonaProvider({ children }) {
       createdAt: new Date().toISOString(),
     };
     setSavedAtmospheres(prev => [...prev, atmosphere].slice(0, 10));
-  };
+  }, [activeSounds]);
 
-  const loadAtmosphere = (atmosphere) => {
-    setActiveSounds(atmosphere.sounds);
-  };
+  const loadAtmosphere = useCallback(async (atmosphere) => {
+    await loadStare(atmosphere.sounds);
+  }, [loadStare]);
 
   return (
     <SonaContext.Provider value={{
       activeSounds,
+      isPlaying,
       activeStory,
-      timerMinutes,
-      alarmTime,
       savedAtmospheres,
+      alarmTime,
       addSound,
       removeSound,
       updateVolume,
+      play,
+      pause,
+      stopAll,
+      loadStare,
       saveAtmosphere,
       loadAtmosphere,
       setActiveStory,
-      setTimerMinutes,
       setAlarmTime,
       setSavedAtmospheres,
     }}>

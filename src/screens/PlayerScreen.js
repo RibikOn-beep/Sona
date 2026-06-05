@@ -1,21 +1,26 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, SafeAreaView, Modal, FlatList,
-  TextInput, Alert
+  StyleSheet, SafeAreaView, Modal, FlatList, TextInput
 } from 'react-native';
 import Slider from '@react-native-community/slider';
-import { Audio } from 'expo-av';
 import { COLORS } from '../utils/colors';
 import { useSona } from '../context/SonaContext';
 import { LIBRARY } from '../data/library';
 
-const TIMER_OPTIONS = [15, 30, 45, 60, 90];
+const TIMER_OPTIONS = [
+  { label: '15 minute', value: 15 },
+  { label: '30 minute', value: 30 },
+  { label: '45 minute', value: 45 },
+  { label: '60 minute', value: 60 },
+  { label: '90 minute', value: 90 },
+  { label: '3 ore', value: 180 },
+  { label: '6 ore', value: 360 },
+  { label: 'Loop infinit', value: -1 },
+];
 
 export default function PlayerScreen() {
-  const { activeSounds, removeSound, updateVolume, saveAtmosphere } = useSona();
-  const [sounds, setSounds] = useState({});
-  const [isPlaying, setIsPlaying] = useState(false);
+  const { activeSounds, isPlaying, activeStory, addSound, removeSound, updateVolume, play, pause, stopAll, saveAtmosphere } = useSona();
   const [showLibrary, setShowLibrary] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showTimerModal, setShowTimerModal] = useState(false);
@@ -25,93 +30,44 @@ export default function PlayerScreen() {
   const [selectedCategory, setSelectedCategory] = useState('ploaie');
   const timerRef = useRef(null);
   const fadeRef = useRef(null);
-  const { addSound } = useSona();
 
   useEffect(() => {
     return () => {
-      stopAll();
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (fadeRef.current) clearInterval(fadeRef.current);
     };
   }, []);
 
-  useEffect(() => {
+  const handleTogglePlay = async () => {
     if (isPlaying) {
-      syncSounds();
+      await pause();
     } else {
-      pauseAll();
+      await play();
     }
-  }, [activeSounds, isPlaying]);
-
-  const syncSounds = async () => {
-    const activeIds = activeSounds.map(s => s.id);
-    for (const id of Object.keys(sounds)) {
-      if (!activeIds.includes(id)) {
-        await sounds[id].unloadAsync();
-        setSounds(prev => { const n = { ...prev }; delete n[id]; return n; });
-      }
-    }
-    for (const s of activeSounds) {
-      if (!sounds[s.id]) {
-        try {
-          const { sound } = await Audio.Sound.createAsync(
-            s.file,
-            { isLooping: true, volume: s.volume, shouldPlay: isPlaying }
-          );
-          setSounds(prev => ({ ...prev, [s.id]: sound }));
-        } catch (e) {}
-      } else {
-        await sounds[s.id].setVolumeAsync(s.volume);
-      }
-    }
-  };
-
-  const togglePlay = async () => {
-    if (!isPlaying) {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        staysActiveInBackground: true,
-        playsInSilentModeIOS: true,
-      });
-      setIsPlaying(true);
-    } else {
-      setIsPlaying(false);
-    }
-  };
-
-  const pauseAll = async () => {
-    for (const sound of Object.values(sounds)) {
-      try { await sound.pauseAsync(); } catch (e) {}
-    }
-  };
-
-  const stopAll = async () => {
-    for (const sound of Object.values(sounds)) {
-      try { await sound.unloadAsync(); } catch (e) {}
-    }
-    setSounds({});
-    setIsPlaying(false);
   };
 
   const handleVolumeChange = async (soundId, volume) => {
-    updateVolume(soundId, volume);
-    if (sounds[soundId]) {
-      await sounds[soundId].setVolumeAsync(volume);
-    }
+    await updateVolume(soundId, volume);
   };
 
   const handleRemoveSound = async (soundId) => {
-    if (sounds[soundId]) {
-      await sounds[soundId].unloadAsync();
-      setSounds(prev => { const n = { ...prev }; delete n[soundId]; return n; });
-    }
-    removeSound(soundId);
+    await removeSound(soundId);
   };
 
   const startTimer = (minute) => {
     if (timerRef.current) clearInterval(timerRef.current);
+    if (fadeRef.current) clearInterval(fadeRef.current);
+    setShowTimerModal(false);
+
+    if (minute === -1) {
+      setTimerActiv(-1);
+      setTimerRamas(-1);
+      return;
+    }
+
     const secunde = minute * 60;
     setTimerActiv(minute);
     setTimerRamas(secunde);
-    setShowTimerModal(false);
 
     timerRef.current = setInterval(() => {
       setTimerRamas(prev => {
@@ -131,11 +87,13 @@ export default function PlayerScreen() {
     const interval = (durataSec * 1000) / steps;
     let step = 0;
 
+    const { default: AudioService } = await import('../services/AudioService');
+
     fadeRef.current = setInterval(async () => {
       step++;
       const factor = 1 - (step / steps);
-      for (const sound of Object.values(sounds)) {
-        try { await sound.setVolumeAsync(Math.max(0, factor)); } catch (e) {}
+      for (const s of activeSounds) {
+        await AudioService.setVolume(s.id, Math.max(0, factor * s.volume));
       }
       if (step >= steps) {
         clearInterval(fadeRef.current);
@@ -154,8 +112,11 @@ export default function PlayerScreen() {
   };
 
   const formatTimer = (sec) => {
-    const m = Math.floor(sec / 60);
+    if (sec === -1) return '∞';
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
     const s = sec % 60;
+    if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
@@ -168,10 +129,21 @@ export default function PlayerScreen() {
 
   const categoryData = LIBRARY[selectedCategory];
 
+  if (activeStory) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.storyActive}>
+          <Text style={styles.storyActiveIcon}>✨</Text>
+          <Text style={styles.storyActiveTitlu}>Poveste sonoră activă</Text>
+          <Text style={styles.storyActiveSubtitlu}>Mergi la tab-ul Povești pentru a controla redarea</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-
         <View style={styles.header}>
           <Text style={styles.titlu}>Player</Text>
           {activeSounds.length > 0 && (
@@ -229,7 +201,7 @@ export default function PlayerScreen() {
             <View style={styles.controls}>
               <TouchableOpacity
                 style={[styles.playBtn, isPlaying && styles.playBtnActive]}
-                onPress={togglePlay}
+                onPress={handleTogglePlay}
                 activeOpacity={0.8}
               >
                 <Text style={styles.playBtnIcon}>{isPlaying ? '⏸' : '▶'}</Text>
@@ -241,7 +213,9 @@ export default function PlayerScreen() {
               {timerActiv ? (
                 <View style={styles.timerActiv}>
                   <View>
-                    <Text style={styles.timerActivLabel}>Timer activ</Text>
+                    <Text style={styles.timerActivLabel}>
+                      {timerActiv === -1 ? 'Loop infinit activ' : 'Timer activ'}
+                    </Text>
                     <Text style={styles.timerActivRamas}>{formatTimer(timerRamas)}</Text>
                   </View>
                   <TouchableOpacity onPress={cancelTimer} style={styles.timerCancelBtn}>
@@ -290,13 +264,7 @@ export default function PlayerScreen() {
               return (
                 <TouchableOpacity
                   style={[styles.soundItemModal, esteActiv && styles.soundItemModalActiv]}
-                  onPress={() => {
-                    if (esteActiv) {
-                      handleRemoveSound(item.id);
-                    } else {
-                      addSound(item);
-                    }
-                  }}
+                  onPress={() => esteActiv ? handleRemoveSound(item.id) : addSound(item)}
                 >
                   <Text style={styles.soundItemName}>{item.name}</Text>
                   <Text style={[styles.soundItemCheck, esteActiv && styles.soundItemCheckActiv]}>
@@ -338,9 +306,9 @@ export default function PlayerScreen() {
           <View style={styles.timerModal}>
             <Text style={styles.timerModalTitlu}>Setează timer</Text>
             <Text style={styles.timerModalSub}>Fade-out 2 minute la final</Text>
-            {TIMER_OPTIONS.map(min => (
-              <TouchableOpacity key={min} style={styles.timerOption} onPress={() => startTimer(min)}>
-                <Text style={styles.timerOptionText}>{min} minute</Text>
+            {TIMER_OPTIONS.map(opt => (
+              <TouchableOpacity key={opt.value} style={styles.timerOption} onPress={() => startTimer(opt.value)}>
+                <Text style={[styles.timerOptionText, opt.value === -1 && { color: COLORS.accent }]}>{opt.label}</Text>
               </TouchableOpacity>
             ))}
             <TouchableOpacity onPress={() => setShowTimerModal(false)} style={styles.timerModalCancel}>
@@ -349,7 +317,6 @@ export default function PlayerScreen() {
           </View>
         </View>
       </Modal>
-
     </SafeAreaView>
   );
 }
@@ -391,6 +358,10 @@ const styles = StyleSheet.create({
   timerActivRamas: { fontSize: 22, fontWeight: '500', color: COLORS.accent },
   timerCancelBtn: { paddingHorizontal: 12, paddingVertical: 6 },
   timerCancelText: { fontSize: 13, color: COLORS.textMuted },
+  storyActive: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 },
+  storyActiveIcon: { fontSize: 48, marginBottom: 16 },
+  storyActiveTitlu: { fontSize: 18, fontWeight: '500', color: COLORS.textPrimary, marginBottom: 8, textAlign: 'center' },
+  storyActiveSubtitlu: { fontSize: 14, color: COLORS.textMuted, textAlign: 'center', lineHeight: 22 },
   modalSafe: { flex: 1, backgroundColor: COLORS.background },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingTop: 24, paddingBottom: 16 },
   modalTitlu: { fontSize: 22, fontWeight: '500', color: COLORS.textPrimary },

@@ -52,11 +52,8 @@ jobs:
       - name: Fix build.gradle
         run: |
           PROJECT_ROOT=$(pwd)
-          # Fix entryFile path - trebuie sa fie relativ la radacina proiectului
           sed -i "s|entryFile = file(\"index.js\")|entryFile = file(\"$PROJECT_ROOT/index.js\")|" android/app/build.gradle
           sed -i 's/signingConfig signingConfigs.release/\/\/ signingConfig signingConfigs.release/' android/app/build.gradle
-          echo "=== entryFile line ==="
-          grep "entryFile" android/app/build.gradle
 
       - name: Build Android APK
         run: |
@@ -65,9 +62,16 @@ jobs:
         env:
           GRADLE_OPTS: -Xmx4g -XX:MaxMetaspaceSize=512m
 
+      - name: Rename APK
+        run: |
+          TAG=${{ github.ref_name }}
+          mv android/app/build/outputs/apk/release/app-release-unsigned.apk \
+             android/app/build/outputs/apk/release/sona-${TAG}.apk
+          echo "APK redenumit: sona-${TAG}.apk"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: sona-${{ github.ref_name }}-vc${{ github.run_number }}
-          path: android/app/build/outputs/apk/release/*.apk
+          name: sona-${{ github.ref_name }}
+          path: android/app/build/outputs/apk/release/sona-*.apk
           retention-days: 30

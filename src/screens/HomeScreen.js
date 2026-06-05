@@ -13,6 +13,7 @@ const STARI = [
     culoare: COLORS.somn,
     suprafata: COLORS.somnSurface,
     border: COLORS.somnBorder,
+    textColor: '#c8c8e8',
   },
   {
     id: 'calm',
@@ -22,6 +23,7 @@ const STARI = [
     culoare: COLORS.calm,
     suprafata: COLORS.calmSurface,
     border: COLORS.calmBorder,
+    textColor: '#c8e8d4',
   },
   {
     id: 'energie',
@@ -31,6 +33,7 @@ const STARI = [
     culoare: COLORS.energie,
     suprafata: COLORS.energieSurface,
     border: COLORS.energieBorder,
+    textColor: '#e8d8a0',
   },
   {
     id: 'focus',
@@ -40,60 +43,25 @@ const STARI = [
     culoare: COLORS.focus,
     suprafata: COLORS.focusSurface,
     border: COLORS.focusBorder,
+    textColor: '#a8c8e8',
   },
 ];
 
 const POVESTI = [
-  {
-    id: 'tren_noapte',
-    titlu: 'Trenul de noapte',
-    durata: '90 min',
-    icon: '🚂',
-    culoare: COLORS.somn,
-    suprafata: COLORS.somnSurface,
-    border: COLORS.somnBorder,
-  },
-  {
-    id: 'cabana_apuseni',
-    titlu: 'Cabană în Apuseni',
-    durata: '60 min',
-    icon: '🏔',
-    culoare: COLORS.calm,
-    suprafata: COLORS.calmSurface,
-    border: COLORS.calmBorder,
-  },
-  {
-    id: 'dimineata_carpati',
-    titlu: 'Dimineață în Carpați',
-    durata: '45 min',
-    icon: '🌄',
-    culoare: COLORS.energie,
-    suprafata: COLORS.energieSurface,
-    border: COLORS.energieBorder,
-  },
-  {
-    id: 'seara_lectura',
-    titlu: 'Seară de lectură',
-    durata: '45 min',
-    icon: '📚',
-    culoare: COLORS.focus,
-    suprafata: COLORS.focusSurface,
-    border: COLORS.focusBorder,
-  },
+  { id: 'tren_noapte', titlu: 'Trenul de noapte', durata: '90 min', icon: '🚂', suprafata: COLORS.somnSurface, border: COLORS.somnBorder, textColor: '#c8c8e8' },
+  { id: 'cabana_apuseni', titlu: 'Cabană în Apuseni', durata: '60 min', icon: '🏔', suprafata: COLORS.calmSurface, border: COLORS.calmBorder, textColor: '#c8e8d4' },
+  { id: 'dimineata_carpati', titlu: 'Dimineață în Carpați', durata: '45 min', icon: '🌄', suprafata: COLORS.energieSurface, border: COLORS.energieBorder, textColor: '#e8d8a0' },
+  { id: 'seara_lectura', titlu: 'Seară de lectură', durata: '45 min', icon: '📚', suprafata: COLORS.focusSurface, border: COLORS.focusBorder, textColor: '#a8c8e8' },
 ];
 
 export default function HomeScreen() {
   const navigation = useNavigation();
-  const { addSound } = useSona();
+  const { loadStare } = useSona();
 
-  const handleStare = (stare) => {
+  const handleStare = async (stare) => {
     const suneteRecomandate = getRecommendedSounds(stare.id, 3);
-    suneteRecomandate.forEach(s => addSound(s));
+    await loadStare(suneteRecomandate);
     navigation.navigate('Player');
-  };
-
-  const handlePoveste = (poveste) => {
-    navigation.navigate('Povești');
   };
 
   const ora = new Date().getHours();
@@ -101,11 +69,7 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.container}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={styles.salut}>{salut}</Text>
           <Text style={styles.intrebare}>Cum te simți acum?</Text>
@@ -123,9 +87,7 @@ export default function HomeScreen() {
                 <Text style={styles.stareIcon}>{stare.icon}</Text>
               </View>
               <View style={styles.stareTitluWrap}>
-                <Text style={[styles.stareTitlu, { color: stare.culoare === COLORS.somn ? '#c8c8e8' : stare.culoare === COLORS.calm ? '#c8e8d4' : stare.culoare === COLORS.energie ? '#e8d8a0' : '#a8c8e8' }]}>
-                  {stare.titlu}
-                </Text>
+                <Text style={[styles.stareTitlu, { color: stare.textColor }]}>{stare.titlu}</Text>
                 <Text style={styles.stareSubtitlu}>{stare.subtitlu}</Text>
               </View>
             </TouchableOpacity>
@@ -134,131 +96,45 @@ export default function HomeScreen() {
 
         <View style={styles.sectiune}>
           <Text style={styles.sectiuneLabel}>Povești sonore</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.povestiScroll}
-          >
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.povestiScroll}>
             {POVESTI.map(poveste => (
               <TouchableOpacity
                 key={poveste.id}
                 style={[styles.povestCard, { backgroundColor: poveste.suprafata, borderColor: poveste.border }]}
-                onPress={() => handlePoveste(poveste)}
+                onPress={() => navigation.navigate('Povești')}
                 activeOpacity={0.75}
               >
                 <Text style={styles.povestIcon}>{poveste.icon}</Text>
-                <Text style={[styles.povestTitlu, { color: poveste.culoare === COLORS.somn ? '#c8c8e8' : poveste.culoare === COLORS.calm ? '#c8e8d4' : poveste.culoare === COLORS.energie ? '#e8d8a0' : '#a8c8e8' }]}>
-                  {poveste.titlu}
-                </Text>
+                <Text style={[styles.povestTitlu, { color: poveste.textColor }]}>{poveste.titlu}</Text>
                 <Text style={styles.povestDurata}>{poveste.durata}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
         </View>
-
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  scroll: {
-    flex: 1,
-  },
-  container: {
-    paddingBottom: 24,
-  },
-  header: {
-    paddingHorizontal: 24,
-    paddingTop: 48,
-    paddingBottom: 28,
-  },
-  salut: {
-    fontSize: 13,
-    color: COLORS.textMuted,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    marginBottom: 6,
-  },
-  intrebare: {
-    fontSize: 28,
-    fontWeight: '500',
-    color: COLORS.textPrimary,
-    lineHeight: 36,
-  },
-  stariContainer: {
-    paddingHorizontal: 16,
-    gap: 10,
-  },
-  stareCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 16,
-    gap: 16,
-  },
-  stareIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-  },
-  stareIcon: {
-    fontSize: 24,
-  },
-  stareTitluWrap: {
-    flex: 1,
-  },
-  stareTitlu: {
-    fontSize: 15,
-    fontWeight: '500',
-    marginBottom: 3,
-  },
-  stareSubtitlu: {
-    fontSize: 12,
-    color: COLORS.textMuted,
-  },
-  sectiune: {
-    marginTop: 32,
-    paddingHorizontal: 24,
-  },
-  sectiuneLabel: {
-    fontSize: 12,
-    color: COLORS.textMuted,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    marginBottom: 14,
-  },
-  povestiScroll: {
-    gap: 10,
-    paddingRight: 24,
-  },
-  povestCard: {
-    width: 130,
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 14,
-  },
-  povestIcon: {
-    fontSize: 22,
-    marginBottom: 10,
-  },
-  povestTitlu: {
-    fontSize: 13,
-    fontWeight: '500',
-    lineHeight: 18,
-    marginBottom: 6,
-  },
-  povestDurata: {
-    fontSize: 11,
-    color: COLORS.textMuted,
-  },
+  safe: { flex: 1, backgroundColor: COLORS.background },
+  scroll: { flex: 1 },
+  container: { paddingBottom: 24 },
+  header: { paddingHorizontal: 24, paddingTop: 48, paddingBottom: 28 },
+  salut: { fontSize: 13, color: COLORS.textMuted, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 6 },
+  intrebare: { fontSize: 28, fontWeight: '500', color: COLORS.textPrimary, lineHeight: 36 },
+  stariContainer: { paddingHorizontal: 16, gap: 10 },
+  stareCard: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 16, padding: 16, gap: 16 },
+  stareIconWrap: { width: 48, height: 48, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.04)' },
+  stareIcon: { fontSize: 24 },
+  stareTitluWrap: { flex: 1 },
+  stareTitlu: { fontSize: 15, fontWeight: '500', marginBottom: 3 },
+  stareSubtitlu: { fontSize: 12, color: COLORS.textMuted },
+  sectiune: { marginTop: 32, paddingHorizontal: 24 },
+  sectiuneLabel: { fontSize: 12, color: COLORS.textMuted, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 14 },
+  povestiScroll: { gap: 10, paddingRight: 24 },
+  povestCard: { width: 130, borderWidth: 1, borderRadius: 14, padding: 14 },
+  povestIcon: { fontSize: 22, marginBottom: 10 },
+  povestTitlu: { fontSize: 13, fontWeight: '500', lineHeight: 18, marginBottom: 6 },
+  povestDurata: { fontSize: 11, color: COLORS.textMuted },
 });
