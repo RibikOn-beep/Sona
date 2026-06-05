@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, SafeAreaView, Modal
+  StyleSheet, SafeAreaView
 } from 'react-native';
 import { Audio } from 'expo-av';
 import { COLORS } from '../utils/colors';
@@ -82,36 +82,53 @@ const POVESTI = [
 ];
 
 export default function StoriesScreen() {
-  const [povestiActiva, setPovestiActiva] = useState(null);
+  const [povestiActivaId, setPovestiActivaId] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [minutCurent, setMinutCurent] = useState(0);
   const [segmentCurent, setSegmentCurent] = useState(0);
-  const [sounds, setSounds] = useState({});
   const soundsRef = useRef({});
   const intervalRef = useRef(null);
   const startTimeRef = useRef(null);
+  const stoppedRef = useRef(false);
 
   useEffect(() => {
     return () => {
-      stopPoveste();
+      clearAll();
     };
   }, []);
 
-  const stopPoveste = async () => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
+  const clearAll = useCallback(async () => {
+    stoppedRef.current = true;
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
     for (const sound of Object.values(soundsRef.current)) {
-      try { await sound.unloadAsync(); } catch (e) {}
+      try { await sound.stopAsync(); await sound.unloadAsync(); } catch (e) {}
     }
     soundsRef.current = {};
-    setSounds({});
+  }, []);
+
+  const stopPoveste = useCallback(async () => {
+    stoppedRef.current = true;
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    for (const sound of Object.values(soundsRef.current)) {
+      try { await sound.stopAsync(); await sound.unloadAsync(); } catch (e) {}
+    }
+    soundsRef.current = {};
     setIsPlaying(false);
     setMinutCurent(0);
     setSegmentCurent(0);
+    setPovestiActivaId(null);
     startTimeRef.current = null;
-  };
+  }, []);
 
-  const startPoveste = async (poveste) => {
-    await stopPoveste();
+  const startPoveste = useCallback(async (poveste) => {
+    await clearAll();
+    stoppedRef.current = false;
 
     await Audio.setAudioModeAsync({
       allowsRecordingIOS: false,
@@ -119,19 +136,23 @@ export default function StoriesScreen() {
       playsInSilentModeIOS: true,
     });
 
-    setPovestiActiva(poveste);
+    setPovestiActivaId(poveste.id);
     setIsPlaying(true);
+    setMinutCurent(0);
+    setSegmentCurent(0);
     startTimeRef.current = Date.now();
 
     await incarcaSegment(poveste, 0);
 
     intervalRef.current = setInterval(async () => {
+      if (stoppedRef.current) return;
+
       const elapsed = (Date.now() - startTimeRef.current) / 60000;
       const minuteScurse = Math.floor(elapsed);
       setMinutCurent(minuteScurse);
 
       if (minuteScurse >= poveste.durata) {
-        await fadeOutSiStop(poveste.durata);
+        await stopPoveste();
         return;
       }
 
@@ -139,16 +160,21 @@ export default function StoriesScreen() {
         s => minuteScurse >= s.start && minuteScurse < s.end
       );
 
-      if (segIdx !== segmentCurent && segIdx >= 0) {
-        setSegmentCurent(segIdx);
-        await tranzitieSegment(poveste, segIdx);
-      }
+      setSegmentCurent(prev => {
+        if (segIdx !== prev && segIdx >= 0) {
+          tranzitieSegment(poveste, segIdx);
+          return segIdx;
+        }
+        return prev;
+      });
     }, 15000);
-  };
+  }, [clearAll, stopPoveste]);
 
   const incarcaSegment = async (poveste, segIdx) => {
+    if (stoppedRef.current) return;
     const segment = poveste.segmente[segIdx];
     for (const s of segment.sunete) {
+      if (stoppedRef.current) return;
       try {
         const { sound } = await Audio.Sound.createAsync(
           s.file,
@@ -157,10 +183,10 @@ export default function StoriesScreen() {
         soundsRef.current[s.id] = sound;
       } catch (e) {}
     }
-    setSounds({ ...soundsRef.current });
   };
 
   const tranzitieSegment = async (poveste, segIdx) => {
+    if (stoppedRef.current) return;
     const segmentNou = poveste.segmente[segIdx];
     const idNoi = segmentNou.sunete.map(s => s.id);
     const idVechi = Object.keys(soundsRef.current);
@@ -170,14 +196,13 @@ export default function StoriesScreen() {
     let step = 0;
 
     const crossfadeInterval = setInterval(async () => {
+      if (stoppedRef.current) { clearInterval(crossfadeInterval); return; }
       step++;
       const factor = step / steps;
 
       for (const id of idVechi) {
         if (!idNoi.includes(id) && soundsRef.current[id]) {
-          try {
-            await soundsRef.current[id].setVolumeAsync(Math.max(0, 1 - factor));
-          } catch (e) {}
+          try { await soundsRef.current[id].setVolumeAsync(Math.max(0, 1 - factor)); } catch (e) {}
         }
       }
 
@@ -185,15 +210,12 @@ export default function StoriesScreen() {
         if (!soundsRef.current[s.id]) {
           try {
             const { sound } = await Audio.Sound.createAsync(
-              s.file,
-              { isLooping: true, volume: s.volum * factor, shouldPlay: true }
+              s.file, { isLooping: true, volume: s.volum * factor, shouldPlay: true }
             );
             soundsRef.current[s.id] = sound;
           } catch (e) {}
         } else {
-          try {
-            await soundsRef.current[s.id].setVolumeAsync(s.volum * factor);
-          } catch (e) {}
+          try { await soundsRef.current[s.id].setVolumeAsync(s.volum * factor); } catch (e) {}
         }
       }
 
@@ -201,38 +223,14 @@ export default function StoriesScreen() {
         clearInterval(crossfadeInterval);
         for (const id of idVechi) {
           if (!idNoi.includes(id) && soundsRef.current[id]) {
-            try {
-              await soundsRef.current[id].unloadAsync();
-              delete soundsRef.current[id];
-            } catch (e) {}
+            try { await soundsRef.current[id].unloadAsync(); delete soundsRef.current[id]; } catch (e) {}
           }
         }
-        setSounds({ ...soundsRef.current });
       }
     }, interval);
   };
 
-  const fadeOutSiStop = async () => {
-    clearInterval(intervalRef.current);
-    const steps = 30;
-    const interval = (90 * 1000) / steps;
-    let step = 0;
-
-    const fadeInterval = setInterval(async () => {
-      step++;
-      const factor = 1 - (step / steps);
-      for (const sound of Object.values(soundsRef.current)) {
-        try { await sound.setVolumeAsync(Math.max(0, factor)); } catch (e) {}
-      }
-      if (step >= steps) {
-        clearInterval(fadeInterval);
-        await stopPoveste();
-        setPovestiActiva(null);
-      }
-    }, interval);
-  };
-
-  const togglePlay = async () => {
+  const togglePlay = useCallback(async () => {
     if (isPlaying) {
       for (const sound of Object.values(soundsRef.current)) {
         try { await sound.pauseAsync(); } catch (e) {}
@@ -244,14 +242,14 @@ export default function StoriesScreen() {
       }
       setIsPlaying(true);
     }
-  };
+  }, [isPlaying]);
 
+  const povestiActiva = POVESTI.find(p => p.id === povestiActivaId);
   const progres = povestiActiva ? minutCurent / povestiActiva.durata : 0;
 
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-
         <View style={styles.header}>
           <Text style={styles.titlu}>Povești sonore</Text>
           <Text style={styles.subtitlu}>Experiențe audio care evoluează în timp</Text>
@@ -260,9 +258,9 @@ export default function StoriesScreen() {
         {POVESTI.map(poveste => (
           <TouchableOpacity
             key={poveste.id}
-            style={[styles.povestCard, { backgroundColor: poveste.suprafata, borderColor: povestiActiva?.id === poveste.id ? poveste.culoare : poveste.border }]}
+            style={[styles.povestCard, { backgroundColor: poveste.suprafata, borderColor: povestiActivaId === poveste.id ? poveste.culoare : poveste.border }]}
             onPress={() => {
-              if (povestiActiva?.id === poveste.id) return;
+              if (povestiActivaId === poveste.id) return;
               startPoveste(poveste);
             }}
             activeOpacity={0.8}
@@ -279,7 +277,7 @@ export default function StoriesScreen() {
               </View>
             </View>
 
-            {povestiActiva?.id === poveste.id && (
+            {povestiActivaId === poveste.id && (
               <View style={styles.playerActiv}>
                 <View style={styles.progressBar}>
                   <View style={[styles.progressFill, { width: `${progres * 100}%`, backgroundColor: poveste.culoare }]} />
@@ -295,23 +293,15 @@ export default function StoriesScreen() {
                     </TouchableOpacity>
                   </View>
                 </View>
-
                 <View style={styles.segmenteRow}>
                   {poveste.segmente.map((seg, i) => (
-                    <View
-                      key={i}
-                      style={[
-                        styles.segmentDot,
-                        i === segmentCurent && { backgroundColor: poveste.culoare }
-                      ]}
-                    />
+                    <View key={i} style={[styles.segmentDot, i === segmentCurent && { backgroundColor: poveste.culoare }]} />
                   ))}
                 </View>
               </View>
             )}
           </TouchableOpacity>
         ))}
-
       </ScrollView>
     </SafeAreaView>
   );
